@@ -1,11 +1,10 @@
-"""Phase 6 benchmark runner: Star-cubing vs BUC vs Bottom-up."""
+"""Benchmark runner: Star-cubing vs BUC vs Bottom-up on POS CSV data."""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import io
-import json
 import random
 import sys
 import time
@@ -25,8 +24,10 @@ from src.algorithm import (  # noqa: E402
     FactRow,
     compute_bottom_up_cube,
     compute_buc_cube,
+    compute_star_cubing_cube,
 )
 from src.algorithm.star_tree import StarTree  # noqa: E402
+from src.ETL import clean_noise_data, etl_pipeline  # noqa: E402
 
 try:
     import matplotlib.pyplot as plt
@@ -36,66 +37,51 @@ except Exception as exc:  # pragma: no cover - explicit runtime check
         "Install dependencies with: pip install -r requirements.txt"
     ) from exc
 
-DIMENSION_NAMES: Sequence[str] = (
-    "Time_Period",
-    "Region",
-    "City",
-    "Category",
-    "Customer_Type",
-    "Payment_Method",
-)
+DEFAULT_DATA_PATH = REPO_ROOT / "data" / "pos_data.csv"
 
 
-def generate_synthetic_rows(num_rows: int, seed: int) -> List[FactRow]:
-    """Generate integer-encoded retail rows following the project contract."""
+def load_fact_rows_from_csv(
+    file_path: Path,
+    raw_limit: int | None = None,
+) -> tuple[List[FactRow], List[str]]:
+    """Load, clean, encode, and convert POS data into benchmark rows."""
 
-    rng = random.Random(seed)
-
-    months = [202601, 202602, 202603, 202604]
-    regions = [0, 1, 2]  # 0: North, 1: Central, 2: South
-    city_by_region = {
-        0: [0, 1, 2],
-        1: [3, 4],
-        2: [5, 6, 7],
-    }
-    categories = [0, 1, 2, 3]  # 0: Electronics
-    payment_methods = [0, 1, 2]
+    cleaned_df = clean_noise_data(str(file_path), max_rows=raw_limit)
+    processed_array, _, dimensions, sale_values, quantity_values = etl_pipeline(
+        cleaned_df
+    )
 
     rows: List[FactRow] = []
-
-    for _ in range(num_rows):
-        month = rng.choice(months)
-        region = rng.choice(regions)
-        city = rng.choice(city_by_region[region])
-
-        customer_type = 1 if rng.random() < 0.22 else 0  # 1: VIP, 0: Normal
-        if customer_type == 1 and rng.random() < 0.8:
-            category = 0
-        else:
-            category = rng.choice(categories)
-
-        payment_method = rng.choice(payment_methods)
-        quantity = rng.randint(1, 5)
-
-        base = 180_000.0 + (category * 55_000.0) + (payment_method * 15_000.0)
-        vip_multiplier = 1.35 if customer_type == 1 else 1.0
-        sales = (base * quantity * vip_multiplier) + rng.uniform(5_000.0, 40_000.0)
-
+    for encoded_row, sales_value, quantity_value in zip(
+        processed_array, sale_values, quantity_values
+    ):
         rows.append(
             FactRow(
-                dimensions=(month, region, city, category, customer_type, payment_method),
-                sales=float(round(sales, 2)),
-                count_txn=1,
+                dimensions=tuple(int(value) for value in encoded_row),
+                sales=float(sales_value),
+                count_txn=int(quantity_value),
             )
         )
 
-    return rows
+    return rows, list(dimensions)
 
 
-def serialize_cube_size_bytes(cube_rows: Iterable[Dict[str, object]]) -> int:
+def format_dataset_path(file_path: Path) -> str:
+    """Return a stable relative path when possible, otherwise the raw path."""
+
+    try:
+        return str(file_path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(file_path)
+
+
+def serialize_cube_size_bytes(
+    cube_rows: Iterable[Dict[str, object]],
+    dimension_names: Sequence[str],
+) -> int:
     """Estimate serialized cube storage size as CSV bytes."""
 
-    fieldnames = [*DIMENSION_NAMES, "total_sales", "count_txn"]
+    fieldnames = [*dimension_names, "total_sales", "count_txn"]
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
@@ -108,6 +94,7 @@ def benchmark_algorithm(
     name: str,
     compute_fn: Callable[[Iterable[FactRow], Sequence[str], float], List[Dict[str, object]]],
     rows: List[FactRow],
+    dimension_names: Sequence[str],
     min_sup: float,
 ) -> Dict[str, float]:
     """Run one benchmark pass and return timing/memory metrics."""
@@ -118,7 +105,7 @@ def benchmark_algorithm(
     start = time.perf_counter()
 
     tracemalloc.start()
-    cube_rows = compute_fn(rows, DIMENSION_NAMES, min_sup)
+    cube_rows = compute_fn(rows, dimension_names, min_sup)
     _, peak_bytes = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
@@ -126,7 +113,7 @@ def benchmark_algorithm(
     cpu_sec = time.process_time() - cpu_before
     rss_after_mb = process.memory_info().rss / (1024 * 1024)
 
-    storage_bytes = serialize_cube_size_bytes(cube_rows)
+    storage_bytes = serialize_cube_size_bytes(cube_rows, dimension_names)
     cpu_utilization_pct = 0.0 if elapsed_sec == 0 else (cpu_sec / elapsed_sec) * 100.0
 
     return {
@@ -158,6 +145,39 @@ def compute_star_tree_cube(
             count=int(row.count_txn),
         )
     return tree.simultaneous_aggregation()
+
+
+def compute_star_cubing_baseline_cube(
+    rows: Iterable[FactRow],
+    dimension_names: Sequence[str],
+    min_sup: float,
+) -> List[Dict[str, object]]:
+    """Run baseline Star-cubing before top-down and bottom-up enhancements."""
+
+    return compute_star_cubing_cube(
+        rows=rows,
+        dimension_names=dimension_names,
+        min_sup=min_sup,
+    )
+
+
+def resolve_algorithms(
+    algorithm_set: str,
+) -> Dict[str, Callable[[Iterable[FactRow], Sequence[str], float], List[Dict[str, object]]]]:
+    """Resolve which algorithms to run based on CLI mode."""
+
+    if algorithm_set == "star-only":
+        return {
+            "Star-cubing baseline": compute_star_cubing_baseline_cube,
+            "Star-cubing enhanced": compute_star_tree_cube,
+        }
+
+    return {
+        "Star-cubing baseline": compute_star_cubing_baseline_cube,
+        "Star-cubing enhanced": compute_star_tree_cube,
+        "BUC": compute_buc_cube,
+        "Bottom-up": compute_bottom_up_cube,
+    }
 
 
 def build_charts(df: pd.DataFrame, chart_dir: Path) -> None:
@@ -215,6 +235,9 @@ def build_charts(df: pd.DataFrame, chart_dir: Path) -> None:
 def parse_sizes(sizes_raw: str) -> List[int]:
     """Parse comma-separated sizes from CLI argument."""
 
+    if sizes_raw.strip().lower() == "full":
+        return []
+
     sizes = [int(chunk.strip()) for chunk in sizes_raw.split(",") if chunk.strip()]
     if not sizes:
         raise ValueError("At least one dataset size must be provided")
@@ -222,13 +245,13 @@ def parse_sizes(sizes_raw: str) -> List[int]:
 
 
 def main() -> None:
-    """CLI entry-point for Phase 6 benchmark workflow."""
+    """CLI entry-point for the benchmark workflow."""
 
-    parser = argparse.ArgumentParser(description="Run Phase 6 benchmark suite")
+    parser = argparse.ArgumentParser(description="Run benchmark suite on POS CSV data")
     parser.add_argument(
         "--sizes",
         default="2000,5000,10000",
-        help="Comma-separated list of row counts (default: 2000,5000,10000)",
+        help="Comma-separated list of row counts, or 'full' for all cleaned rows",
     )
     parser.add_argument("--repeats", type=int, default=2, help="Runs per dataset size")
     parser.add_argument(
@@ -238,34 +261,62 @@ def main() -> None:
         help="Iceberg threshold over Total_Sales",
     )
     parser.add_argument("--seed", type=int, default=20260418, help="Random seed")
+    parser.add_argument(
+        "--data-path",
+        default=str(DEFAULT_DATA_PATH),
+        help="Path to the raw POS CSV file",
+    )
+    parser.add_argument(
+        "--raw-limit",
+        type=int,
+        default=15000,
+        help="Maximum raw rows to read from the CSV before ETL",
+    )
+    parser.add_argument(
+        "--algorithm-set",
+        choices=["star-only", "full"],
+        default="full",
+        help="Algorithm set: star-only (baseline/enhanced) or full (+BUC/Bottom-up)",
+    )
     args = parser.parse_args()
 
     sizes = parse_sizes(args.sizes)
+    data_path = Path(args.data_path)
+    if not data_path.is_file():
+        raise FileNotFoundError(f"Data file not found: {data_path}")
+
+    rows, dimension_names = load_fact_rows_from_csv(data_path, raw_limit=args.raw_limit)
+    random.Random(args.seed).shuffle(rows)
+
+    if not sizes:
+        sizes = [len(rows)]
+
+    max_size = max(sizes)
+    if max_size > len(rows):
+        raise ValueError(
+            f"Requested size {max_size} exceeds available cleaned rows {len(rows)}"
+        )
+
     base_dir = REPO_ROOT / "docs" / "benchmark"
     log_dir = base_dir / "logs"
     chart_dir = base_dir / "charts"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    algorithms: Dict[str, Callable[[Iterable[FactRow], Sequence[str], float], List[Dict[str, object]]]] = {
-        "Star-cubing": compute_star_tree_cube,
-        "BUC": compute_buc_cube,
-        "Bottom-up": compute_bottom_up_cube,
-    }
+    algorithms = resolve_algorithms(args.algorithm_set)
 
     records: List[Dict[str, object]] = []
     run_counter = 0
 
     for size in sizes:
+        dataset_rows = rows[:size]
         for repeat_idx in range(args.repeats):
-            run_seed = args.seed + (size * 31) + repeat_idx
-            rows = generate_synthetic_rows(num_rows=size, seed=run_seed)
-
             for algorithm_name, compute_fn in algorithms.items():
                 run_counter += 1
                 metrics = benchmark_algorithm(
                     name=algorithm_name,
                     compute_fn=compute_fn,
-                    rows=rows,
+                    rows=dataset_rows,
+                    dimension_names=dimension_names,
                     min_sup=args.min_sup,
                 )
                 metrics.update(
@@ -273,7 +324,10 @@ def main() -> None:
                         "run_id": run_counter,
                         "repeat": repeat_idx + 1,
                         "dataset_rows": size,
-                        "seed": run_seed,
+                        "seed": args.seed,
+                        "data_path": format_dataset_path(data_path),
+                        "raw_limit": args.raw_limit,
+                        "clean_rows": len(rows),
                         "min_sup": args.min_sup,
                     }
                 )

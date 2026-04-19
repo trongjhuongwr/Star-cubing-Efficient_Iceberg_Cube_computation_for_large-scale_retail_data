@@ -1,18 +1,16 @@
 # Star-cubing Iceberg Cube Miner
 
-Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, with benchmark artifacts for Phase 6 (Task 13-15).
+Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, with benchmark artifacts for the benchmark phase.
 
 ## Scope
 
 - Iceberg cube computation with Star-tree aggregation.
-- Comparative benchmark against BUC and Bottom-up.
+- Comparative benchmark between Star-cubing baseline and Star-cubing enhanced.
 - Log and chart artifacts for runtime, CPU/RAM, and output storage.
 
 ## Repository Layout
 
 - `src/algorithm/star_tree.py`: Star-tree data structure and simultaneous aggregation.
-- `src/algorithm/buc.py`: BUC iceberg cube implementation for benchmark.
-- `src/algorithm/bottom_up.py`: Bottom-up cuboid enumeration implementation.
 - `scripts/benchmark.py`: Benchmark runner and chart renderer.
 - `docs/benchmark/logs/`: Raw benchmark logs (`.csv`, `.json`) and summary.
 - `docs/benchmark/charts/`: Evidence charts (`runtime_line.png`, `memory_bar.png`, `storage_line.png`).
@@ -27,19 +25,21 @@ Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, 
 pip install -r requirements.txt
 ```
 
-## Run Phase 6 Benchmark
+## Run Benchmark
 
-Default profile (3 dataset sizes, 1 repeat each):
+Full-data profile on `data/pos_data.csv` (1 repeat):
 
 ```bash
-python scripts/benchmark.py --sizes 2000,5000,10000 --repeats 1 --min-sup 18000000
+python scripts/benchmark.py --data-path data/pos_data.csv --raw-limit 5000000 --sizes full --repeats 1 --min-sup 18000000 --algorithm-set star-only
 ```
 
 Custom profile example:
 
 ```bash
-python scripts/benchmark.py --sizes 5000,10000,20000 --repeats 2 --min-sup 25000000 --seed 20260418
+python scripts/benchmark.py --data-path data/pos_data.csv --raw-limit 2000000 --sizes full --repeats 1 --min-sup 18000000 --algorithm-set star-only --seed 20260418
 ```
+
+The benchmark reads raw POS CSV rows, cleans and encodes them through ETL, then compares Star-cubing baseline and Star-cubing enhanced on the same shuffled dataset.
 
 ## Benchmark Outputs
 
