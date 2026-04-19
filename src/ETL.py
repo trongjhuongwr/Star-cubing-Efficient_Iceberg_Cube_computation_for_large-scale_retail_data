@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 
 def clean_noise_data(file_path) -> pd.DataFrame:
     df = pd.read_csv(file_path)
@@ -9,14 +10,14 @@ def clean_noise_data(file_path) -> pd.DataFrame:
 
     df_clean = df.drop_duplicates()
 
-    # 2. Xoá NaN
+    # Xoá NaN
     critical_cols = ['Date', 'Sales_Amount', 'Quantity']
     df_clean = df_clean.dropna(subset=critical_cols)
 
-    # 3. Lọc nhiễu logic
+    # Lọc nhiễu logic
     df_clean = df_clean[(df_clean['Sales_Amount'] > 0) & (df_clean['Quantity'] > 0)]
 
-    # 4. Xử lý Outlier cho Quantity bằng IQR
+    # Xử lý Outlier cho Quantity bằng IQR
     Q1 = df_clean['Quantity'].quantile(0.25)
     Q3 = df_clean['Quantity'].quantile(0.75)
     IQR = Q3 - Q1
@@ -39,14 +40,12 @@ def etl_pipeline(df):
     df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
     df['Date'] = df['Date'].dt.strftime('%Y%m')
     
-    # Xác định đâu là Dimension và Measure
+    # Xác định Dimension và Measure
     measures = ['Sales_Amount', 'Quantity']
     dimensions = [col for col in df.columns if col not in measures]
     
     # Tính Cardinality cho từng Dimension
     cardinalities = {col: df[col].nunique() for col in dimensions}
-    
-    # Sắp xếp các Dimension theo Cardinality từ thấp đến cao
     sorted_dimensions = sorted(cardinalities.keys(), key=lambda k: cardinalities[k])
     
     # Integer Encoding
@@ -58,11 +57,10 @@ def etl_pipeline(df):
         mapping_dict[col] = col_mapping
         
         df[col] = df[col].map(col_mapping)
-        
-    df_final = df[sorted_dimensions]
+    
+    df_final = df[sorted_dimensions].copy()
     
     processed_data = df_final.to_numpy()
-    
     sale_values = df['Sales_Amount'].to_numpy()
     quantity_values = df['Quantity'].to_numpy()
     
@@ -84,3 +82,23 @@ def compare_boxplot(file_path, cleaned_df):
     
     plt.tight_layout()
     plt.show()
+
+def export_to_csv(processed_array, mappings, dimensions, sale_values, quantity_values, file_name="pos_encoded.csv"):
+    df_export = pd.DataFrame(processed_array, columns=list(dimensions))
+    df_export["Sales_Amount"] = sale_values
+    df_export["Quantity"] = quantity_values
+    
+    df_export.to_csv(file_name, index=False, encoding='utf-8-sig')
+    print(f"Đã xuất dữ liệu encoded tại: {file_name}")
+
+    # mapping file
+    mapping_file = file_name.replace(".csv", "_mapping.json")
+    
+    clean_mappings = {}
+    for col, mapping in mappings.items():
+        clean_mappings[col] = {str(k): int(v) for k, v in mapping.items()}
+        
+    with open(mapping_file, 'w', encoding='utf-8') as f:
+        json.dump(clean_mappings, f, ensure_ascii=False, indent=4)
+        
+    print(f"[*] Đã xuất file mapping tại: {mapping_file}")

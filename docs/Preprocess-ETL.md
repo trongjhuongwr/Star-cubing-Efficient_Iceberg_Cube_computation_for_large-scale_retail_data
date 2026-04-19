@@ -3,7 +3,6 @@
 ## 1. Mục tiêu
 
 - Tự động hóa quá trình tiền xử lý dữ liệu bán hàng thô (Raw Data) thành dạng cấu trúc tối ưu (Numpy 2D Array) phục vụ cho thuật toán khai phá dữ liệu (Data Mining / Star-Tree).
-- Áp dụng nguyên lý Medallion Architecture (Bronze -> Silver -> Gold) trực tiếp trên bộ nhớ (RAM) bằng thư viện pandas và numpy.
 - Xử lý triệt để các vấn đề về dữ liệu nhiễu (Noise) và tự động hóa mã hóa đặc trưng (Integer Encoding) theo phân tán dữ liệu (Cardinality).
 
 ---
@@ -33,13 +32,13 @@ Luồng dữ liệu đi qua các bước sau (thực thi tuần tự trong bộ 
 
 1. **Extract (Đọc dữ liệu):** Đọc file CSV bằng `pandas.read_csv`.
 
-2. **Data Cleaning (Silver Layer):**
+2. **Data Cleaning:**
    - Bỏ dòng trùng lặp (`drop_duplicates`).
    - Xóa dòng có cột trọng yếu bị rỗng (`dropna`).
    - Xóa giao dịch hoàn tiền hoặc lỗi (`Sales_Amount > 0` & `Quantity > 0`).
    - Lọc Outlier của cột `Quantity` qua giới hạn cận trên $Q3 + 1.5 \times IQR$.
 
-3. **Transform (Gold Layer):**
+3. **Transform:**
    - Tính toán Dimension vs Measure.
    - Sắp xếp thứ tự cột theo thứ tự độ phân tán (Cardinality) tăng dần.
    - Áp dụng Hash-map (`mapping_dict`) để Integer Encoding toàn bộ giá trị String sang Int (Bắt đầu từ 1).

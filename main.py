@@ -1,6 +1,6 @@
-from src.ETL import clean_noise_data, etl_pipeline, compare_boxplot
+from src.ETL import clean_noise_data, etl_pipeline, compare_boxplot, export_to_csv
 
-file_path = r".\\src\\test_data.csv"
+file_path = r".\\pos_data.csv"
 
 df_clean = clean_noise_data(file_path)
 processed_array, mappings, dimensions, sale_values, quantity_values = etl_pipeline(df_clean)
@@ -20,4 +20,5 @@ print(sale_values)
 print("\nQuantity Values:")
 print(quantity_values)
 
-compare_boxplot(file_path, df_clean)
+export_to_csv(processed_array, mappings, dimensions, sale_values, quantity_values)
+# compare_boxplot(file_path, df_clean)
