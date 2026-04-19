@@ -24,7 +24,6 @@ from src.algorithm import (  # noqa: E402
     FactRow,
     compute_bottom_up_cube,
     compute_buc_cube,
-    compute_star_cubing_cube,
 )
 from src.algorithm.star_tree import StarTree  # noqa: E402
 from src.ETL import clean_noise_data, etl_pipeline  # noqa: E402
@@ -154,7 +153,25 @@ def compute_star_cubing_baseline_cube(
 ) -> List[Dict[str, object]]:
     """Run baseline Star-cubing before top-down and bottom-up enhancements."""
 
-    return compute_star_cubing_cube(rows=rows, dimension_names=dimension_names, min_sup=min_sup)
+    tree = StarTree(dimension_names=dimension_names, min_sup=min_sup)
+    for row in rows:
+        tree.insert_transaction(
+            transaction=list(row.dimensions),
+            sales=float(row.sales),
+            count=int(row.count_txn),
+        )
+
+    aggregated: Dict[tuple[object, ...], Dict[str, object]] = {}
+    for path, leaf_node in tree._iter_leaf_nodes(tree.root, 0, []):
+        if leaf_node.count_txn == 0 and leaf_node.total_sales == 0.0:
+            continue
+        tree._accumulate_cuboids(path, leaf_node.total_sales, leaf_node.count_txn, aggregated)
+
+    valid_rows = [row for row in aggregated.values() if row["total_sales"] >= min_sup]
+    valid_rows.sort(
+        key=lambda row: tuple(str(row[dimension]) for dimension in dimension_names)
+    )
+    return valid_rows
 
 
 def resolve_algorithms(
