@@ -1,56 +1,42 @@
-# Phase 6 Report - Đánh Giá & Đóng Gói Dự Án
+# Benchmark Report - POS CSV
 
-## 1. Phạm vi công việc (Khánh)
+## 1. Mục tiêu
 
-Thực hiện trọn bộ Phase 6 theo `flowtask.md`:
+So sánh 2 biến thể Star-cubing trên dữ liệu bán lẻ thật:
 
-- Task 13: Viết script đo thời gian chạy và tài nguyên cho Star-cubing vs BUC vs Bottom-up.
-- Task 14: Vẽ biểu đồ so sánh hiệu năng và không gian lưu trữ từ file log.
-- Task 15: Viết tài liệu đặc tả thuật toán và hướng dẫn cài đặt.
+- Star-cubing baseline (trước tăng cường)
+- Star-cubing enhanced (sau tăng cường)
 
 ## 2. Cấu hình benchmark
 
-- Script: `scripts/benchmark.py`
-- Kích thước dataset: 2,000; 5,000; 10,000 rows
-- Repeat: 1
-- Ngưỡng iceberg: `min_sup = 18,000,000`
-- Chiều dữ liệu: 6 chiều theo Data Contract
-- Thuật toán benchmark:
-  - Star-cubing (thực thi qua Star-tree)
-  - BUC
-  - Bottom-up
+- Input: `data/pos_data.csv`
+- Raw limit: `5000000` dòng CSV thô (full raw data)
+- Cleaned rows sau ETL: `4965008`
+- Dataset sizes benchmark: `full` (`4965008` rows)
+- Repeat: `1`
+- Iceberg threshold: `min_sup = 18000000`
+- Shuffle seed: `20260418`
+- Metrics: runtime, CPU time, peak tracemalloc, cube rows, output storage
 
-## 3. Chỉ số đo lường
-
-Mỗi lần chạy ghi các cột:
-
-- `elapsed_sec`
-- `cpu_sec`, `cpu_utilization_pct`
-- `rss_before_mb`, `rss_after_mb`, `rss_delta_mb`
-- `tracemalloc_peak_mb`
-- `cube_rows`
-- `output_storage_kb`
-
-## 4. Kết quả tổng hợp
+## 3. Kết quả tổng hợp
 
 Nguồn: `docs/benchmark/logs/summary_by_algorithm.csv`
 
 | Algorithm | Mean Runtime (s) | Mean CPU (s) | Mean Peak RAM (MB) | Mean Output (KB) | Mean Cube Rows |
 | :-- | --: | --: | --: | --: | --: |
-| BUC | 0.2453 | 0.2396 | 1.8033 | 97.5817 | 2731.67 |
-| Star-cubing | 0.2888 | 0.2917 | 1.6623 | 73.0117 | 1866.67 |
-| Bottom-up | 2.9949 | 2.9010 | 2.7003 | 109.0743 | 2731.67 |
+| Star-cubing baseline | 127.7213 | 126.7344 | 46.4490 | 1925.4940 | 57637.00 |
+| Star-cubing enhanced | 128.3914 | 127.2813 | 45.3560 | 1912.9970 | 57252.00 |
 
 ### Nhận xét chính
 
-- Bottom-up chậm nhất, tăng thời gian mạnh khi số dòng tăng.
-- BUC có runtime trung bình tốt nhất trong profile này.
-- Star-cubing có output nhỏ nhất, thể hiện lợi thế nén cho pipeline BI.
-- Về RAM, Star-cubing và BUC thấp hơn Bottom-up rõ rệt.
+- Runtime giữa baseline và enhanced gần tương đương trên full-data.
+- Enhanced dùng peak memory thấp hơn baseline (45.356MB vs 46.449MB).
+- Enhanced tạo output gọn hơn baseline (1912.997KB vs 1925.494KB).
+- Enhanced sinh ít cube rows hơn baseline (57252 vs 57637), thể hiện hiệu quả từ cơ chế tăng cường.
 
-## 5. Biểu đồ bằng chứng
+## 4. Biểu đồ bằng chứng
 
-Sinh tự động tại:
+Các file được sinh tại:
 
 - `docs/benchmark/charts/runtime_line.png`
 - `docs/benchmark/charts/memory_bar.png`
@@ -58,23 +44,17 @@ Sinh tự động tại:
 
 Diễn giải nhanh:
 
-- `runtime_line.png`: Bottom-up có độ dốc cao nhất theo kích thước dữ liệu.
-- `memory_bar.png`: Bottom-up có đỉnh memory lớn nhất.
-- `storage_line.png`: Star-cubing tạo output gọn hơn hai thuật toán còn lại.
+- `runtime_line.png`: runtime baseline và enhanced xấp xỉ nhau.
+- `memory_bar.png`: enhanced có peak memory thấp hơn baseline.
+- `storage_line.png`: enhanced có kích thước output thấp hơn baseline.
 
-## 6. Artifacts phục vụ báo cáo Word/Slide
+## 5. Artifact phục vụ báo cáo
 
 - Log chi tiết: `docs/benchmark/logs/performance_log.csv`
 - Log JSON: `docs/benchmark/logs/performance_log.json`
 - Bảng tổng hợp: `docs/benchmark/logs/summary_by_algorithm.csv`
 - Tài liệu kỹ thuật: `docs/benchmark/benchmark_algorithm_spec.md`
 
-## 7. Kết luận Phase 6
+## 6. Kết luận
 
-Phase 6 đã hoàn tất theo 3 task:
-
-- Có script benchmark tái lập được để đo runtime/CPU/RAM.
-- Có biểu đồ trực quan dùng làm bằng chứng hiệu năng.
-- Có tài liệu đặc tả và hướng dẫn setup phục vụ đóng gói dự án.
-
-Nếu cần benchmark quy mô lớn hơn (50k, 100k, 500k rows), chỉ cần thay tham số `--sizes` và `--repeats` trong script hiện tại.
+Benchmark trên `pos_data.csv` đã hoàn tất với full 5,000,000 dòng raw. Kết quả cho thấy phiên bản Star-cubing enhanced cải thiện về memory và kích thước output so với baseline, đồng thời giữ runtime ở mức tương đương.
