@@ -27,10 +27,10 @@ Nguồn: `docs/benchmark/logs/summary_by_algorithm.csv`
 
 | Algorithm | Mean Runtime (s) | Mean CPU (s) | Mean Peak RAM (MB) | Mean Output (KB) | Mean Cube Rows |
 | :-- | --: | --: | --: | --: | --: |
-| Star-cubing enhanced | 221.4151 | 209.1719 | 46.6270 | 1912.9900 | 57252.00 |
-| BUC | 980.5245 | 964.8750 | 100.3440 | 1925.4870 | 57637.00 |
-| Bottom-up | 3540.8799 | 3475.4844 | 87.7170 | 1925.4870 | 57637.00 |
-| Star-cubing baseline | 7353.2844 | 6812.8750 | 85.2870 | 1925.4870 | 57637.00 |
+| Star-cubing enhanced | 166.4438 | 164.6562 | 46.6270 | 1912.9900 | 57252.00 |
+| BUC | 942.8837 | 933.9531 | 100.3440 | 1925.4870 | 57637.00 |
+| Bottom-up | 3005.6329 | 2980.7031 | 87.7170 | 1925.4870 | 57637.00 |
+| Star-cubing baseline | 5621.5513 | 5559.0938 | 85.2870 | 1925.4870 | 57637.00 |
 
 ### Nhận xét chính
 
@@ -49,9 +49,9 @@ Các file được sinh tại:
 
 Diễn giải nhanh:
 
-- `runtime_line.png`: do profile `sizes=full` chỉ có 1 mốc dữ liệu nên hiển thị theo dạng điểm cho mỗi thuật toán.
+- `runtime_line.png`: do profile `sizes=full` chỉ có 1 mốc dữ liệu nên biểu đồ được render dạng bar để dễ so sánh.
 - `memory_bar.png`: thể hiện peak memory trung bình theo thuật toán trên full-size.
-- `storage_line.png`: cũng là dạng điểm vì chỉ có 1 mốc `dataset_rows`.
+- `storage_line.png`: với profile single-size cũng được render dạng bar để dễ quan sát chênh lệch.
 
 ## 5. Artifact phục vụ báo cáo
 

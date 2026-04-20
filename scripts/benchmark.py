@@ -297,19 +297,29 @@ def build_charts(df: pd.DataFrame, chart_dir: Path) -> None:
     """Render runtime, memory, and storage comparison charts."""
 
     chart_dir.mkdir(parents=True, exist_ok=True)
+    single_size_profile = df["dataset_rows"].nunique() == 1
 
     mean_runtime = (
         df.groupby(["algorithm", "dataset_rows"], as_index=False)["elapsed_sec"].mean()
     )
     plt.figure(figsize=(10, 6))
-    for algo, frame in mean_runtime.groupby("algorithm"):
-        frame = frame.sort_values("dataset_rows")
-        plt.plot(frame["dataset_rows"], frame["elapsed_sec"], marker="o", label=algo)
-    plt.title("Runtime Comparison by Dataset Size")
-    plt.xlabel("Number of input rows")
+    if single_size_profile:
+        runtime_bar = (
+            df.groupby("algorithm", as_index=False)["elapsed_sec"].mean()
+            .sort_values("elapsed_sec")
+        )
+        plt.bar(runtime_bar["algorithm"], runtime_bar["elapsed_sec"], width=0.6)
+        plt.title("Runtime Comparison (Single Dataset Size)")
+        plt.xlabel("Algorithm")
+    else:
+        for algo, frame in mean_runtime.groupby("algorithm"):
+            frame = frame.sort_values("dataset_rows")
+            plt.plot(frame["dataset_rows"], frame["elapsed_sec"], marker="o", label=algo)
+        plt.title("Runtime Comparison by Dataset Size")
+        plt.xlabel("Number of input rows")
+        plt.legend()
     plt.ylabel("Elapsed time (seconds)")
     plt.grid(alpha=0.25)
-    plt.legend()
     plt.tight_layout()
     plt.savefig(chart_dir / "runtime_line.png", dpi=160)
     plt.close()
@@ -332,14 +342,23 @@ def build_charts(df: pd.DataFrame, chart_dir: Path) -> None:
         df.groupby(["algorithm", "dataset_rows"], as_index=False)["output_storage_kb"].mean()
     )
     plt.figure(figsize=(10, 6))
-    for algo, frame in mean_storage.groupby("algorithm"):
-        frame = frame.sort_values("dataset_rows")
-        plt.plot(frame["dataset_rows"], frame["output_storage_kb"], marker="s", label=algo)
-    plt.title("Cube Output Storage by Dataset Size")
-    plt.xlabel("Number of input rows")
+    if single_size_profile:
+        storage_bar = (
+            df.groupby("algorithm", as_index=False)["output_storage_kb"].mean()
+            .sort_values("output_storage_kb")
+        )
+        plt.bar(storage_bar["algorithm"], storage_bar["output_storage_kb"], width=0.6)
+        plt.title("Cube Output Storage (Single Dataset Size)")
+        plt.xlabel("Algorithm")
+    else:
+        for algo, frame in mean_storage.groupby("algorithm"):
+            frame = frame.sort_values("dataset_rows")
+            plt.plot(frame["dataset_rows"], frame["output_storage_kb"], marker="s", label=algo)
+        plt.title("Cube Output Storage by Dataset Size")
+        plt.xlabel("Number of input rows")
+        plt.legend()
     plt.ylabel("Serialized output size (KB)")
     plt.grid(alpha=0.25)
-    plt.legend()
     plt.tight_layout()
     plt.savefig(chart_dir / "storage_line.png", dpi=160)
     plt.close()

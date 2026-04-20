@@ -47,10 +47,10 @@ Source: `docs/benchmark/logs/summary_by_algorithm.csv` after `--sizes full --raw
 
 | Algorithm | Elapsed Mean (s) | CPU Mean (s) | Peak tracemalloc (MB) | Output (KB) | Cube Rows |
 | :-- | --: | --: | --: | --: | --: |
-| Star-cubing enhanced | 221.415 | 209.172 | 46.627 | 1912.990 | 57252 |
-| BUC | 980.525 | 964.875 | 100.344 | 1925.487 | 57637 |
-| Bottom-up | 3540.880 | 3475.484 | 87.717 | 1925.487 | 57637 |
-| Star-cubing baseline | 7353.284 | 6812.875 | 85.287 | 1925.487 | 57637 |
+| Star-cubing enhanced | 166.444 | 164.656 | 46.627 | 1912.990 | 57252 |
+| BUC | 942.884 | 933.953 | 100.344 | 1925.487 | 57637 |
+| Bottom-up | 3005.633 | 2980.703 | 87.717 | 1925.487 | 57637 |
+| Star-cubing baseline | 5621.551 | 5559.094 | 85.287 | 1925.487 | 57637 |
 
 ## Benchmark Outputs
 
