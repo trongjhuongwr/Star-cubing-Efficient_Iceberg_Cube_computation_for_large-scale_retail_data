@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import gc
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Sequence, Tuple, Union
 
@@ -30,7 +31,7 @@ def compute_buc_cube(
     Branches with total sales below ``min_sup`` are pruned.
     """
 
-    materialized_rows = list(rows)
+    materialized_rows = rows if isinstance(rows, list) else list(rows)
     if not materialized_rows:
         return []
 
@@ -38,8 +39,11 @@ def compute_buc_cube(
     aggregated: Dict[Tuple[DimensionValue, ...], Tuple[float, int]] = {}
 
     def recurse(partition: List[FactRow], dim_index: int, prefix: Tuple[DimensionValue, ...]) -> None:
-        total_sales = sum(row.sales for row in partition)
-        total_count = sum(row.count_txn for row in partition)
+        total_sales = 0.0
+        total_count = 0
+        for row in partition:
+            total_sales += float(row.sales)
+            total_count += int(row.count_txn)
 
         if total_sales < min_sup:
             return
@@ -55,8 +59,14 @@ def compute_buc_cube(
         for row in partition:
             groups[row.dimensions[dim_index]].append(row)
 
-        for value in sorted(groups):
-            recurse(groups[value], dim_index + 1, prefix + (value,))
+        values = sorted(groups)
+        for value in values:
+            subgroup = groups.pop(value)
+            recurse(subgroup, dim_index + 1, prefix + (value,))
+            del subgroup
+
+        del values
+        del groups
 
     recurse(materialized_rows, 0, tuple())
 
@@ -70,6 +80,8 @@ def compute_buc_cube(
         result.append(record)
 
     result.sort(key=lambda row: tuple(str(row[dim]) for dim in dimension_names))
+    del aggregated
+    gc.collect()
     return result
 
 

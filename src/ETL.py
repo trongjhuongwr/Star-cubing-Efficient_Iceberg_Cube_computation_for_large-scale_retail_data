@@ -1,10 +1,10 @@
-import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import json
+import pandas as pd
 
-def clean_noise_data(file_path) -> pd.DataFrame:
-    df = pd.read_csv(file_path)
+def clean_noise_data(file_path, max_rows: int | None = None) -> pd.DataFrame:
+    df = pd.read_csv(file_path, nrows=max_rows)
     initial_rows = len(df)
     print(f"Xử lý nhiễu. Số dòng ban đầu: {initial_rows}")
 

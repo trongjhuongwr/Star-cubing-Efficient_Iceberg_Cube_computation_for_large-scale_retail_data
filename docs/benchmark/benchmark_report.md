@@ -1,56 +1,47 @@
-# Phase 6 Report - Đánh Giá & Đóng Gói Dự Án
+# Benchmark Report - POS CSV
 
-## 1. Phạm vi công việc (Khánh)
+## 1. Mục tiêu
 
-Thực hiện trọn bộ Phase 6 theo `flowtask.md`:
+So sánh hiệu năng và không gian lưu trữ của 4 thuật toán trên dữ liệu bán lẻ:
 
-- Task 13: Viết script đo thời gian chạy và tài nguyên cho Star-cubing vs BUC vs Bottom-up.
-- Task 14: Vẽ biểu đồ so sánh hiệu năng và không gian lưu trữ từ file log.
-- Task 15: Viết tài liệu đặc tả thuật toán và hướng dẫn cài đặt.
+- Star-cubing baseline (trước tăng cường)
+- Star-cubing enhanced (sau tăng cường)
+- BUC
+- Bottom-up
 
 ## 2. Cấu hình benchmark
 
-- Script: `scripts/benchmark.py`
-- Kích thước dataset: 2,000; 5,000; 10,000 rows
-- Repeat: 1
-- Ngưỡng iceberg: `min_sup = 18,000,000`
-- Chiều dữ liệu: 6 chiều theo Data Contract
-- Thuật toán benchmark:
-  - Star-cubing (thực thi qua Star-tree)
-  - BUC
-  - Bottom-up
+- Input: `data/pos_data.csv`
+- Algorithm set: `full`
+- Raw limit: `5000000` dòng CSV thô
+- Cleaned rows sau ETL: `4962783`
+- Dataset sizes benchmark: `full` (`4962783` rows)
+- Repeat: `1`
+- Iceberg threshold: `min_sup = 18000000`
+- Shuffle seed: `20260418`
+- Metrics: runtime, CPU time, peak tracemalloc, cube rows, output storage
 
-## 3. Chỉ số đo lường
-
-Mỗi lần chạy ghi các cột:
-
-- `elapsed_sec`
-- `cpu_sec`, `cpu_utilization_pct`
-- `rss_before_mb`, `rss_after_mb`, `rss_delta_mb`
-- `tracemalloc_peak_mb`
-- `cube_rows`
-- `output_storage_kb`
-
-## 4. Kết quả tổng hợp
+## 3. Kết quả tổng hợp
 
 Nguồn: `docs/benchmark/logs/summary_by_algorithm.csv`
 
 | Algorithm | Mean Runtime (s) | Mean CPU (s) | Mean Peak RAM (MB) | Mean Output (KB) | Mean Cube Rows |
 | :-- | --: | --: | --: | --: | --: |
-| BUC | 0.2453 | 0.2396 | 1.8033 | 97.5817 | 2731.67 |
-| Star-cubing | 0.2888 | 0.2917 | 1.6623 | 73.0117 | 1866.67 |
-| Bottom-up | 2.9949 | 2.9010 | 2.7003 | 109.0743 | 2731.67 |
+| Star-cubing enhanced | 166.4438 | 164.6562 | 46.6270 | 1912.9900 | 57252.00 |
+| BUC | 942.8837 | 933.9531 | 100.3440 | 1925.4870 | 57637.00 |
+| Bottom-up | 3005.6329 | 2980.7031 | 87.7170 | 1925.4870 | 57637.00 |
+| Star-cubing baseline | 5621.5513 | 5559.0938 | 85.2870 | 1925.4870 | 57637.00 |
 
 ### Nhận xét chính
 
-- Bottom-up chậm nhất, tăng thời gian mạnh khi số dòng tăng.
-- BUC có runtime trung bình tốt nhất trong profile này.
-- Star-cubing có output nhỏ nhất, thể hiện lợi thế nén cho pipeline BI.
-- Về RAM, Star-cubing và BUC thấp hơn Bottom-up rõ rệt.
+- Star-cubing enhanced có runtime trung bình thấp nhất trong 4 thuật toán.
+- BUC có peak tracemalloc cao nhất trong profile full-size này.
+- Star-cubing baseline có runtime cao nhất ở stress profile.
+- Star-cubing enhanced tạo output nhỏ hơn nhóm còn lại (1912.990 KB vs 1925.487 KB).
 
-## 5. Biểu đồ bằng chứng
+## 4. Biểu đồ bằng chứng
 
-Sinh tự động tại:
+Các file được sinh tại:
 
 - `docs/benchmark/charts/runtime_line.png`
 - `docs/benchmark/charts/memory_bar.png`
@@ -58,23 +49,17 @@ Sinh tự động tại:
 
 Diễn giải nhanh:
 
-- `runtime_line.png`: Bottom-up có độ dốc cao nhất theo kích thước dữ liệu.
-- `memory_bar.png`: Bottom-up có đỉnh memory lớn nhất.
-- `storage_line.png`: Star-cubing tạo output gọn hơn hai thuật toán còn lại.
+- `runtime_line.png`: do profile `sizes=full` chỉ có 1 mốc dữ liệu nên biểu đồ được render dạng bar để dễ so sánh.
+- `memory_bar.png`: thể hiện peak memory trung bình theo thuật toán trên full-size.
+- `storage_line.png`: với profile single-size cũng được render dạng bar để dễ quan sát chênh lệch.
 
-## 6. Artifacts phục vụ báo cáo Word/Slide
+## 5. Artifact phục vụ báo cáo
 
 - Log chi tiết: `docs/benchmark/logs/performance_log.csv`
 - Log JSON: `docs/benchmark/logs/performance_log.json`
 - Bảng tổng hợp: `docs/benchmark/logs/summary_by_algorithm.csv`
 - Tài liệu kỹ thuật: `docs/benchmark/benchmark_algorithm_spec.md`
 
-## 7. Kết luận Phase 6
+## 6. Kết luận
 
-Phase 6 đã hoàn tất theo 3 task:
-
-- Có script benchmark tái lập được để đo runtime/CPU/RAM.
-- Có biểu đồ trực quan dùng làm bằng chứng hiệu năng.
-- Có tài liệu đặc tả và hướng dẫn setup phục vụ đóng gói dự án.
-
-Nếu cần benchmark quy mô lớn hơn (50k, 100k, 500k rows), chỉ cần thay tham số `--sizes` và `--repeats` trong script hiện tại.
+Benchmark mode `full` đã hoàn tất trên dữ liệu lớn và sinh đủ log/charts cho 4 thuật toán. Ở stress profile này, Star-cubing enhanced có thời gian chạy thấp nhất và output nhỏ nhất, trong khi baseline là phương án chậm nhất.

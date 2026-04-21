@@ -1,16 +1,18 @@
-# Phase 6 - Đặc Tả Thuật Toán & Hướng Dẫn Cài Đặt
+# Benchmark - Đặc Tả Thuật Toán & Hướng Dẫn Cài Đặt
 
 ## Mục tiêu
 
-Tài liệu này đóng vai trò Task 15 cho nhóm Khánh:
+Tài liệu này mô tả luồng benchmark hiện tại:
 
 - Đặc tả cách benchmark 3 hướng tiếp cận: Star-cubing (Star-tree), BUC, Bottom-up.
+- Đặc tả cách benchmark 2 biến thể Star-cubing: baseline (trước tăng cường) và enhanced (sau tăng cường).
 - Chuẩn hóa quy trình cài đặt/chạy để tái lập số liệu thực nghiệm.
 - Mô tả luồng dữ liệu từ input tổng hợp đến log/charts dùng cho báo cáo Word.
 
 ## Data Contract dùng cho benchmark
 
-- Dữ liệu đầu vào: số nguyên đã mã hóa theo đúng thứ tự chiều.
+- Dữ liệu đầu vào: file CSV gốc `data/pos_data.csv` đi qua ETL để làm sạch và integer encoding.
+- Benchmark full-data cho Phase 6 dùng toàn bộ 5,000,000 dòng raw: `--raw-limit 5000000`.
 - Thứ tự chiều: `Time_Period`, `Region`, `City`, `Category`, `Customer_Type`, `Payment_Method`.
 - Measure:
   - `total_sales` (float) dùng làm điều kiện iceberg.
@@ -27,32 +29,24 @@ Tài liệu này đóng vai trò Task 15 cho nhóm Khánh:
 - Khi tổng hợp, các prefix hoặc value hỗ trợ thấp được cuộn thành `'ALL'`.
 - Ưu điểm trong benchmark: kết quả có xu hướng nén tốt, output nhỏ hơn.
 
-### 2) BUC
+### 2) Star-cubing enhanced
 
-- Chia dữ liệu theo chiều hiện tại, đệ quy xuống chiều tiếp theo.
-- Mỗi mức có thêm nhánh roll-up `'ALL'`.
-- Nhánh `total_sales < min_sup` bị prune ngay để giảm không gian tìm kiếm.
-- Ưu điểm trong benchmark: runtime ổn trên dataset vừa, tận dụng pruning theo phân vùng.
-
-### 3) Bottom-up
-
-- Mỗi transaction sinh toàn bộ tổ hợp cuboid (`2^d`, với `d = 6`).
-- Gom nhóm toàn cục bằng key tuple và lọc theo `min_sup` ở cuối.
-- Nhược điểm: nhiều trạng thái trung gian, tốn thời gian và RAM hơn khi dữ liệu lớn dần.
+- Sử dụng cơ chế tăng cường top-down và bottom-up để giảm số nhánh/cuboid cần duyệt.
+- Vẫn giữ chuẩn output Iceberg Cube theo ngưỡng `min_sup`.
 
 ## Luồng thực thi benchmark
 
-1. Script tạo dữ liệu synthetic theo Data Contract, có tương quan nghiệp vụ:
-   - VIP có xác suất cao mua Electronics.
-2. Chạy lần lượt 3 thuật toán trên cùng một batch dữ liệu.
-3. Đo các metric:
+1. Script đọc một prefix của `data/pos_data.csv` (`--raw-limit`), làm sạch nhiễu bằng ETL, rồi integer encoding theo cardinality.
+2. Dữ liệu sau ETL được shuffle deterministically bằng `--seed`.
+3. Chạy lần lượt 4 thuật toán (Star-cubing baseline, Star-cubing enhanced, BUC, Bottom-up) trên cùng một batch dữ liệu.
+4. Đo các metric:
    - `elapsed_sec`
    - `cpu_sec`, `cpu_utilization_pct`
    - `rss_before_mb`, `rss_after_mb`, `rss_delta_mb`
    - `tracemalloc_peak_mb`
    - `cube_rows`, `output_storage_kb`
-4. Ghi log vào `docs/benchmark/logs`.
-5. Vẽ chart vào `docs/benchmark/charts`.
+5. Ghi log vào `docs/benchmark/logs`.
+6. Vẽ chart vào `docs/benchmark/charts`.
 
 ## Hướng dẫn cài đặt
 
@@ -67,16 +61,16 @@ Tài liệu này đóng vai trò Task 15 cho nhóm Khánh:
 pip install -r requirements.txt
 ```
 
-### Chạy benchmark mặc định
+### Chạy benchmark full-data
 
 ```bash
-python scripts/benchmark.py --sizes 2000,5000,10000 --repeats 1 --min-sup 18000000
+python scripts/benchmark.py --data-path data/pos_data.csv --algorithm-set full --sizes 2000,5000,10000 --repeats 1 --raw-limit 15000 --min-sup 18000000 --chunk-size 50000 --seed 20260418
 ```
 
-### Chạy benchmark mở rộng
+### Chạy benchmark với quy mô raw khác
 
 ```bash
-python scripts/benchmark.py --sizes 5000,10000,20000 --repeats 2 --min-sup 25000000 --seed 20260418
+python scripts/benchmark.py --data-path data/pos_data.csv --algorithm-set full --sizes full --repeats 1 --raw-limit 5000000 --min-sup 18000000 --chunk-size 100000 --seed 20260418
 ```
 
 ## Đầu ra chuẩn dùng cho báo cáo
@@ -90,6 +84,4 @@ python scripts/benchmark.py --sizes 5000,10000,20000 --repeats 2 --min-sup 25000
 
 ## Kết luận kỹ thuật ngắn
 
-- Với profile hiện tại, Bottom-up là baseline đơn giản nhưng chậm và tốn bộ nhớ nhất.
-- BUC và Star-tree đều hiệu quả hơn rõ rệt về runtime.
-- Star-tree có lợi thế nén kết quả đầu ra, phù hợp mục tiêu Iceberg Cube read-heavy cho BI.
+- Với profile full-data hiện tại, baseline và enhanced có runtime tương đương, nhưng enhanced tiết kiệm bộ nhớ và cho output gọn hơn.

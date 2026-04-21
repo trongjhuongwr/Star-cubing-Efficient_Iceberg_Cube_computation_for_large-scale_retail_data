@@ -1,18 +1,16 @@
 # Star-cubing Iceberg Cube Miner
 
-Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, with benchmark artifacts for Phase 6 (Task 13-15).
+Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, with benchmark artifacts for the benchmark phase.
 
 ## Scope
 
 - Iceberg cube computation with Star-tree aggregation.
-- Comparative benchmark against BUC and Bottom-up.
+- Comparative benchmark across 4 algorithms: Star-cubing baseline, Star-cubing enhanced, BUC, and Bottom-up.
 - Log and chart artifacts for runtime, CPU/RAM, and output storage.
 
 ## Repository Layout
 
 - `src/algorithm/star_tree.py`: Star-tree data structure and simultaneous aggregation.
-- `src/algorithm/buc.py`: BUC iceberg cube implementation for benchmark.
-- `src/algorithm/bottom_up.py`: Bottom-up cuboid enumeration implementation.
 - `scripts/benchmark.py`: Benchmark runner and chart renderer.
 - `docs/benchmark/logs/`: Raw benchmark logs (`.csv`, `.json`) and summary.
 - `docs/benchmark/charts/`: Evidence charts (`runtime_line.png`, `memory_bar.png`, `storage_line.png`).
@@ -27,19 +25,32 @@ Project Python + SQL for computing Iceberg Cube on large-scale retail POS data, 
 pip install -r requirements.txt
 ```
 
-## Run Phase 6 Benchmark
+## Run Benchmark
 
-Default profile (3 dataset sizes, 1 repeat each):
-
-```bash
-python scripts/benchmark.py --sizes 2000,5000,10000 --repeats 1 --min-sup 18000000
-```
-
-Custom profile example:
+Recommended benchmark profile (trend analysis with multiple dataset sizes):
 
 ```bash
-python scripts/benchmark.py --sizes 5000,10000,20000 --repeats 2 --min-sup 25000000 --seed 20260418
+python scripts/benchmark.py --data-path data/pos_data.csv --algorithm-set full --sizes 2000,5000,10000 --repeats 1 --raw-limit 15000 --min-sup 18000000 --chunk-size 50000 --seed 20260418
 ```
+
+Full-size stress profile (latest report baseline):
+
+```bash
+python scripts/benchmark.py --data-path data/pos_data.csv --algorithm-set full --sizes full --repeats 1 --raw-limit 5000000 --min-sup 18000000 --chunk-size 100000 --seed 20260418
+```
+
+The benchmark reads raw POS CSV rows, performs ETL cleaning and encoding, then runs all 4 algorithms on the same shuffled dataset to compare runtime, CPU/RAM, and output storage.
+
+## Latest Full-Size Snapshot
+
+Source: `docs/benchmark/logs/summary_by_algorithm.csv` after `--sizes full --raw-limit 5000000`
+
+| Algorithm | Elapsed Mean (s) | CPU Mean (s) | Peak tracemalloc (MB) | Output (KB) | Cube Rows |
+| :-- | --: | --: | --: | --: | --: |
+| Star-cubing enhanced | 166.444 | 164.656 | 46.627 | 1912.990 | 57252 |
+| BUC | 942.884 | 933.953 | 100.344 | 1925.487 | 57637 |
+| Bottom-up | 3005.633 | 2980.703 | 87.717 | 1925.487 | 57637 |
+| Star-cubing baseline | 5621.551 | 5559.094 | 85.287 | 1925.487 | 57637 |
 
 ## Benchmark Outputs
 
