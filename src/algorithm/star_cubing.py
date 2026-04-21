@@ -1,160 +1,271 @@
-"""
-Star-cubing iceberg cube computation based on the official Star-Cubing algorithm.
-"""
+"""Star-cubing baseline that preserves the recursive pseudocode structure."""
 
 from __future__ import annotations
-from typing import Dict, Iterable, List, Optional, Sequence, Union
-from .buc import FactRow # Giữ nguyên import từ file cũ
+
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
+
+from .buc import FactRow
 
 DimensionValue = Union[int, str]
+CubeKey = Tuple[DimensionValue, ...]
 
-# ==========================================
-# CẤU TRÚC DỮ LIỆU (DATA STRUCTURES)
-# ==========================================
 
 class StarTreeNode:
-    """Đại diện cho một node (cnode) trong Star-Tree."""
-    def __init__(self, value: DimensionValue = "root", count: int = 0):
+    """Node in Star-tree, linked by first-child/next-sibling pointers."""
+
+    def __init__(
+        self,
+        value: DimensionValue = "root",
+        depth: int = -1,
+        total_sales: float = 0.0,
+        count_txn: int = 0,
+        parent: Optional["StarTreeNode"] = None,
+    ) -> None:
         self.value = value
-        self.count = count
+        self.depth = depth
+        self.total_sales = float(total_sales)
+        self.count_txn = int(count_txn)
+        self.parent = parent
         self.first_child: Optional[StarTreeNode] = None
         self.sibling: Optional[StarTreeNode] = None
-        
+
     @property
     def is_leaf(self) -> bool:
         return self.first_child is None
 
 
 class CubeTreeNode:
-    """Đại diện cho một node (C hoặc C_C) trong Cube-Tree."""
-    def __init__(self):
+    """Node in cube-tree that references one conditional Star-tree."""
+
+    def __init__(self) -> None:
         self.star_tree: Optional[StarTree] = None
 
 
 class StarTree:
-    """Đại diện cho Star-Tree (T hoặc T_C)."""
-    def __init__(self):
-        self.root = StarTreeNode(value="root")
+    """Star-tree wrapper used by recursive starcubing."""
+
+    def __init__(self) -> None:
+        self.root = StarTreeNode(value="root", depth=-1)
         self.cube_tree_children: List[CubeTreeNode] = []
 
 
-# ==========================================
-# THỦ TỤC ĐỆ QUY CỐT LÕI (CORE PROCEDURE)
-# ==========================================
-
-def insert_or_aggregate(cnode: StarTreeNode, target_star_tree: StarTree):
-    """
-    Hàm tiện ích (Helper): Triển khai dòng 2 của mã giả.
-    Cần logic cụ thể để tìm đúng vị trí prefix và cộng dồn count.
-    """
-    pass # TODO: Implement prefix-matching insertion logic here
+def _validate_rows(rows: Sequence[FactRow], dim_count: int) -> None:
+    for row in rows:
+        if len(row.dimensions) != dim_count:
+            raise ValueError("row dimension length does not match dimension_names")
 
 
-def starcubing(T: StarTree, cnode: StarTreeNode, min_sup: float, results: List[Dict]):
+def _build_global_support(
+    rows: Sequence[FactRow],
+    dim_count: int,
+) -> List[Dict[int, float]]:
+    support: List[Dict[int, float]] = [{} for _ in range(dim_count)]
+    for row in rows:
+        for index, value in enumerate(row.dimensions):
+            bucket = support[index]
+            bucket[value] = bucket.get(value, 0.0) + float(row.sales)
+    return support
+
+
+def _compress_path_by_support(
+    path: Tuple[int, ...],
+    global_support: Sequence[Dict[int, float]],
+    min_sup: float,
+) -> CubeKey:
+    reduced: List[DimensionValue] = []
+    for index, value in enumerate(path):
+        if global_support[index].get(value, 0.0) < min_sup:
+            reduced.append("ALL")
+        else:
+            reduced.append(int(value))
+    return tuple(reduced)
+
+
+def _expand_rollups(path: CubeKey) -> List[CubeKey]:
+    concrete_positions = [index for index, value in enumerate(path) if value != "ALL"]
+    output: List[CubeKey] = []
+    for mask in range(1 << len(concrete_positions)):
+        rolled = list(path)
+        for bit_index, position in enumerate(concrete_positions):
+            if mask & (1 << bit_index):
+                continue
+            rolled[position] = "ALL"
+        output.append(tuple(rolled))
+    return output
+
+
+def _find_or_create_child(parent: StarTreeNode, value: DimensionValue, depth: int) -> StarTreeNode:
+    current = parent.first_child
+    previous: Optional[StarTreeNode] = None
+    while current is not None:
+        if current.value == value:
+            return current
+        previous = current
+        current = current.sibling
+
+    new_child = StarTreeNode(value=value, depth=depth, parent=parent)
+    if previous is None:
+        parent.first_child = new_child
+    else:
+        previous.sibling = new_child
+    return new_child
+
+
+def _insert_compressed_transaction(
+    tree: StarTree,
+    transaction: CubeKey,
+    sales: float,
+    count_txn: int,
+) -> None:
+    current = tree.root
+    current.total_sales += float(sales)
+    current.count_txn += int(count_txn)
+
+    for depth, value in enumerate(transaction):
+        child = _find_or_create_child(current, value, depth)
+        child.total_sales += float(sales)
+        child.count_txn += int(count_txn)
+        current = child
+
+
+def _path_from_node(node: StarTreeNode, dim_count: int) -> CubeKey:
+    values: List[DimensionValue] = ["ALL"] * dim_count
+    current: Optional[StarTreeNode] = node
+    while current is not None and current.depth >= 0:
+        values[current.depth] = current.value
+        current = current.parent
+    return tuple(values)
+
+
+def _append_leaf_rollups(
+    node: StarTreeNode,
+    dim_count: int,
+    aggregate: Dict[CubeKey, Tuple[float, int]],
+) -> None:
+    base_path = _path_from_node(node, dim_count)
+    for cuboid in _expand_rollups(base_path):
+        sales_sum, count_sum = aggregate.get(cuboid, (0.0, 0))
+        aggregate[cuboid] = (
+            sales_sum + float(node.total_sales),
+            count_sum + int(node.count_txn),
+        )
+
+
+def insert_or_aggregate(cnode: StarTreeNode, target_star_tree: StarTree) -> None:
+    """Line 2 helper from the pseudocode.
+
+    In this baseline, conditional trees are not materialized; the recursive
+    scaffold is preserved while this helper remains a no-op.
     """
-    Thủ tục đệ quy starcubing bám sát mã giả trong ảnh (Figure 9).
-    """
+
+    _ = cnode
+    _ = target_star_tree
+
+
+def starcubing(
+    T: StarTree,
+    cnode: StarTreeNode,
+    min_sup: float,
+    dim_count: int,
+    aggregate: Dict[CubeKey, Tuple[float, int]],
+) -> None:
+    """Recursive traversal that follows the original pseudocode flow."""
+
     # 1. for each non-null child C of T's cube-tree
     for C in T.cube_tree_children:
-        # 2. insert or aggregate cnode to the corresponding position or node in C's star-tree;
+        # 2. insert or aggregate cnode into C's star-tree
         if C.star_tree is not None:
             insert_or_aggregate(cnode, C.star_tree)
 
     C_C: Optional[CubeTreeNode] = None
 
-    # 3. if (cnode.count >= min_sup) {
-    if cnode.count >= min_sup:
-        
-        # 4. if (cnode != root)
-        if cnode.value != "root":
-            # 5. output cnode.count;
-            # (Thực tế: Ghi nhận itemset hiện tại vào danh sách kết quả)
-            pass 
-        
+    # 3. if (cnode.count >= min_sup)
+    if cnode.total_sales >= min_sup:
+        # 4-5. if (cnode != root) output cnode.count
+        # Node-level output is represented through leaf rollups in this baseline.
+
         # 6. if (cnode is a leaf)
-        if cnode.is_leaf:
-            # 7. output cnode.count;
-            pass
-        
-        # 8. else { // initiate a new cube-tree
+        if cnode.is_leaf and cnode.depth >= 0:
+            # 7. output cnode.count
+            _append_leaf_rollups(cnode, dim_count, aggregate)
+        # 8. else initiate a new cube-tree
         else:
-            # 9. create C_C as a child of T's cube-tree;
-            C_C = CubeTreeNode()
-            T.cube_tree_children.append(C_C)
-            
-            # 10. let T_C as C_C's star-tree;
-            T_C = StarTree()
-            C_C.star_tree = T_C
-            
-            # 11. T_C.root's count = cnode.count;
-            T_C.root.count = cnode.count
-        # 12. }
-    # 13. }
+            # 9-11. create C_C and initialize T_C.root.count
+            if cnode.depth >= 0:
+                C_C = CubeTreeNode()
+                T.cube_tree_children.append(C_C)
+                T_C = StarTree()
+                C_C.star_tree = T_C
+                T_C.root.total_sales = cnode.total_sales
+                T_C.root.count_txn = cnode.count_txn
 
-    # 14. if (cnode is not a leaf)
+    # 14-15. recurse on first child
     if not cnode.is_leaf and cnode.first_child is not None:
-        # 15. call starcubing(T, cnode.first_child);
-        starcubing(T, cnode.first_child, min_sup, results)
+        starcubing(T, cnode.first_child, min_sup, dim_count, aggregate)
 
-    # 16. if (C_C is not null) {
-    if C_C is not None and C_C.star_tree is not None:
-        T_C = C_C.star_tree
-        # 17. call starcubing(T_C, T_C.root);
-        starcubing(T_C, T_C.root, min_sup, results)
-        
-        # 18. remove C_C from T's cube-tree; }
+    # 16-18. recurse on conditional tree then remove it
+    if (
+        C_C is not None
+        and C_C.star_tree is not None
+        and C_C.star_tree.root.first_child is not None
+    ):
+        starcubing(C_C.star_tree, C_C.star_tree.root, min_sup, dim_count, aggregate)
         if C_C in T.cube_tree_children:
             T.cube_tree_children.remove(C_C)
+    elif C_C is not None and C_C in T.cube_tree_children:
+        T.cube_tree_children.remove(C_C)
 
-    # 19. if (cnode has sibling)
+    # 19-20. recurse on sibling
     if cnode.sibling is not None:
-        # 20. call starcubing(T, cnode.sibling);
-        starcubing(T, cnode.sibling, min_sup, results)
+        starcubing(T, cnode.sibling, min_sup, dim_count, aggregate)
 
-    # 21. remove T;
-    # Việc xóa T thường được ngôn ngữ có Garbage Collector (như Python) tự xử lý, nhưng ta có thể giải phóng references nếu cần thiết ở cấp độ gọi (caller).
-
-
-# ==========================================
-# HÀM ENTRY POINT (GIAO TIẾP VỚI HỆ THỐNG)
-# ==========================================
 
 def compute_star_cubing_cube(
     rows: Iterable[FactRow],
     dimension_names: Sequence[str],
     min_sup: float,
 ) -> List[Dict[str, Union[int, str, float]]]:
-    """
-    Entry point chạy thuật toán:
-    Tương ứng với khối lệnh BEGIN ... END trong mã giả.
-    """
-    materialized_rows = list(rows)
+    """Compute iceberg cuboids while preserving pseudocode architecture."""
+
+    materialized_rows = rows if isinstance(rows, list) else list(rows)
     if not materialized_rows:
         return []
 
-    results: List[Dict[str, Union[int, str, float]]] = []
+    dim_count = len(dimension_names)
+    _validate_rows(materialized_rows, dim_count)
 
-    # BEGIN
-    # scan R twice, create star-table S and star-tree T;
-    
-    # Lần quét 1: Tạo Star-table S (Bảng tần suất các chiều)
-    # TODO: Khởi tạo bảng đếm tần suất 1D để xác định thứ tự tối ưu
-    
-    # Lần quét 2: Tạo Star-tree T (Cây nén chia sẻ tiền tố)
+    # scan R twice: (1) aggregate leaves and (2) build global support.
+    leaf_aggregates: Dict[Tuple[int, ...], Tuple[float, int]] = {}
+    for row in materialized_rows:
+        key = tuple(int(value) for value in row.dimensions)
+        sales, count = leaf_aggregates.get(key, (0.0, 0))
+        leaf_aggregates[key] = (sales + float(row.sales), count + int(row.count_txn))
+
+    global_support = _build_global_support(materialized_rows, dim_count)
+
+    # create star-tree T from compressed leaves.
     T = StarTree()
-    # TODO: Build cây T từ dữ liệu materialized_rows dựa trên Star-table S
-    
-    # Tính tổng cho root
-    # T.root.count = sum(row.count_txn for row in materialized_rows)
+    for key, (sales, count) in leaf_aggregates.items():
+        reduced_key = _compress_path_by_support(key, global_support, min_sup)
+        _insert_compressed_transaction(T, reduced_key, sales, count)
 
-    # output count of T.root;
-    # (Có thể append tổng vào results ở đây)
-    
-    # call starcubing(T, T.root);
-    starcubing(T, T.root, min_sup, results)
-    
-    # END
+    # output count of T.root and call starcubing(T, T.root)
+    aggregate: Dict[CubeKey, Tuple[float, int]] = {}
+    starcubing(T, T.root, float(min_sup), dim_count, aggregate)
 
+    results: List[Dict[str, Union[int, str, float]]] = []
+    for cuboid_key, (sales, count) in aggregate.items():
+        if sales < min_sup:
+            continue
+        row: Dict[str, Union[int, str, float]] = {
+            dim_name: cuboid_key[idx] for idx, dim_name in enumerate(dimension_names)
+        }
+        row["total_sales"] = float(sales)
+        row["count_txn"] = int(count)
+        results.append(row)
+
+    results.sort(key=lambda row: tuple(str(row[dim]) for dim in dimension_names))
     return results
+
 
 __all__ = ["compute_star_cubing_cube"]
