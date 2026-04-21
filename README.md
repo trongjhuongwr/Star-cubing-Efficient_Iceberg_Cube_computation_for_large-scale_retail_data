@@ -45,12 +45,12 @@ The benchmark reads raw POS CSV rows, performs ETL cleaning and encoding, then r
 
 Source: `docs/benchmark/logs/summary_by_algorithm.csv` after `--sizes full --raw-limit 5000000`
 
-| Algorithm | Elapsed Mean (s) | CPU Mean (s) | Peak tracemalloc (MB) | Output (KB) | Cube Rows |
-| :-- | --: | --: | --: | --: | --: |
-| Star-cubing enhanced | 166.444 | 164.656 | 46.627 | 1912.990 | 57252 |
-| BUC | 942.884 | 933.953 | 100.344 | 1925.487 | 57637 |
-| Bottom-up | 3005.633 | 2980.703 | 87.717 | 1925.487 | 57637 |
-| Star-cubing baseline | 5621.551 | 5559.094 | 85.287 | 1925.487 | 57637 |
+| Algorithm            | Elapsed Mean (s) | CPU Mean (s) | Peak tracemalloc (MB) | Output (KB) | Cube Rows |
+| :------------------- | ---------------: | -----------: | --------------------: | ----------: | --------: |
+| Star-cubing enhanced |          166.444 |      164.656 |                46.627 |    1912.990 |     57252 |
+| BUC                  |          942.884 |      933.953 |               100.344 |    1925.487 |     57637 |
+| Bottom-up            |         3005.633 |     2980.703 |                87.717 |    1925.487 |     57637 |
+| Star-cubing baseline |         5621.551 |     5559.094 |                85.287 |    1925.487 |     57637 |
 
 ## Benchmark Outputs
 
@@ -67,3 +67,18 @@ After each successful run:
 
 - `docs/benchmark/benchmark_algorithm_spec.md`: Task 15 technical specification and setup guide.
 - `docs/benchmark/benchmark_report.md`: Benchmark evidence report for Word/slide integration.
+
+## Task Assignment and Progress
+
+The following table details the responsibilities and performance progresses for each team member:
+
+| Member                 | Responsibilities                                                                                                                                                         | Progress  |
+| :--------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------- |
+| **Trần Viết Gia Huy**  | - Define Data Contract<br>- Design SQL Schema, optimize Clustered Columnstore Index.<br>- Power BI Visualization                                                         | Excellent |
+| **Nguyễn Minh Nhựt**   | - Implement StarNode compressed data structure<br>- Implement `min_sup` conditions and Star-compression logic                                                            | Excellent |
+| **Nguyễn Trọng Hưởng** | - Collaborate on StarTree core algorithm development.<br>- Develop recursive functions for Simultaneous Aggregation.                                                     | Excellent |
+| **Nguyễn Quốc Khánh**  | - Implement baseline algorithms (BUC and Bottom-up) for benchmarking.<br>- Write scripts for performance measurement (CPU, RAM) across various `min_sup` levels.         | Excellent |
+| **Ngô Chánh Phong**    | - Develop scripts to generate simulated Retail POS data.<br>- Create large-scale raw datasets (2 - 5 million rows) ensuring data density and business logic correlation. | Excellent |
+| **Dương Quang Đông**   | - Build In-memory ETL processing flows<br>- Automate Integer Encoding and column sorting based on Cardinality.                                                           | Excellent |
+| **Nguyễn Đình Lương**  | - Develop DAX measures to prevent duplication.<br>- Collaborate on UI/UX design for the Iceberg Cube analysis dashboard.                                                 | Excellent |
+| **Tô Xuân Đông**       | - Analyze benchmark logs, visualize performance and compression ratios using Matplotlib/Seaborn.<br>- Write technical documentation (README.md, docs).                   | Excellent |
