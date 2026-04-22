@@ -43,14 +43,14 @@ The benchmark reads raw POS CSV rows, performs ETL cleaning and encoding, then r
 
 ## Latest Full-Size Snapshot
 
-Source: `docs/benchmark/logs/summary_by_algorithm.csv` after `--sizes full --raw-limit 5000000`
+Source: `docs/benchmark/logs/summary_by_algorithm.csv` after `--sizes 1000000 --raw-limit 1500000`
 
 | Algorithm            | Elapsed Mean (s) | CPU Mean (s) | Peak tracemalloc (MB) | Output (KB) | Cube Rows |
 | :------------------- | ---------------: | -----------: | --------------------: | ----------: | --------: |
-| Star-cubing baseline |           81.263 |       79.625 |                50.851 |    1911.252 |     57202 |
-| Star-cubing enhanced |          245.856 |      241.078 |                46.627 |    1912.990 |     57252 |
-| BUC                  |         1381.075 |     1347.500 |               100.344 |    1925.487 |     57637 |
-| Bottom-up            |         3015.181 |     2980.281 |                87.717 |    1925.487 |     57637 |
+| Star-cubing enhanced |           39.952 |       35.984 |                41.521 |    1645.164 |     50851 |
+| BUC                  |          209.483 |      171.953 |                42.342 |    1688.813 |     52182 |
+| Star-cubing baseline |          403.231 |      337.797 |                41.854 |    1636.146 |     50583 |
+| Bottom-up            |          726.236 |      609.641 |                53.573 |    1688.813 |     52182 |
 
 ## Benchmark Outputs
 
